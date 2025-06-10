@@ -1,0 +1,206 @@
+Option Compare Database
+
+Private Sub chkBridges_Click()
+If chkBridges.Value Then
+   txtBuffer.Enabled = True
+   chkOnBridge.Value = False
+Else
+   txtBuffer.Enabled = True
+End If
+End Sub
+
+Private Sub chkOnBridge_Click()
+If chkOnBridge.Value Then
+   txtBuffer.Enabled = True
+   chkBridges.Value = False
+End If
+End Sub
+
+Private Sub cmdExcel_Click()
+Dim path As String
+
+path = CurrentProject.path & "\RandomSelection.xls"
+DoCmd.TransferSpreadsheet acExport, acSpreadsheetTypeExcel9, "RandomSelections", path, True
+MsgBox "File Exported to: " & path, vbInformation, "Exported to Excel"
+
+End Sub
+
+Private Sub cmdReport_Click()
+DoCmd.OpenReport "RandomPointReport", acViewPreview, , , acWindowNormal
+End Sub
+
+Private Sub cmdRun_Click()
+
+
+Dim rstRandomSelection As Recordset
+Dim rstLoop As Recordset
+Dim i As Integer, rpt As Integer
+Dim loopFlag As Boolean, valFlag As Boolean
+Dim mp As Single
+Dim s As String
+
+FillStaticVars
+
+Randomize
+
+'Delete Existing Entries from the RandomSelections Table
+DoCmd.SetWarnings False
+DoCmd.OpenQuery "DeleteEntries", acViewNormal, acEdit
+DoCmd.SetWarnings True
+
+'Open Selection table for assess
+Set cn = CurrentProject.Connection
+Set rstRandomSelection = New ADODB.Recordset
+rstRandomSelection.Open "RandomSelections", cn, adOpenDynamic, adLockOptimistic
+
+'Set up Progress bar
+progress.Visible = True
+lblProgress.Visible = True
+progress.Max = pMax
+progress.Value = 0
+
+'Get a recordset to initiate a loop with the beg and ends of Routes
+Set rstLoop = FillLoop
+rstLoop.MoveFirst
+
+Do Until rstLoop.EOF  'Main Loop
+Route = rstLoop("SR")
+Steps = Int((rstLoop("End") - rstLoop("BEG")) / Increment)
+DIR = rstLoop("DIR")
+RPoints = getRPts
+lblProgress.Caption = "Generating Random # for " & Route & ":"
+'Check to make sure that the # of Steps > RPoints
+If Steps <= RPoints + AltPts Then
+   s = "Number of Points exceed the Number of possible mileposts." & vbCrLf
+   s = s & "Please either reduce the Number of required random points " & vbCrLf
+   s = s & "or decrease the 'Create Random Points every'...." & vbCrLf
+   s = s & "This includes Alternate Point Number."
+   MsgBox s
+   Exit Sub
+End If
+i = 0
+'Calc Random Step and qualify
+DoEvents
+Do Until i = RPoints
+loopFlag = False
+   Do Until loopFlag
+      rpt = Int((Steps * Rnd) + 1)
+      mp = rpt * Increment
+      'Checking routines follows
+      valFlag = False
+      'Check the number
+        '1.  Already Chosen  aChosen
+        '2.  Within a Bridge Area if selected onBridge
+        If Not achosen(mp) Then
+           If Bridge = True Or BridgeOn = True Then
+              If Not onBridge(mp) Then
+                 valFlag = True
+               End If
+            Else
+               valFlag = True
+            End If
+        End If
+        'Check Construction Sites and such
+        If valFlag Then
+           If Not onCMLimits(mp) Then
+              valFlag = True
+            Else
+               valFlag = False
+            End If
+        End If
+      If valFlag Then
+        loopFlag = True
+        rstRandomSelection.AddNew
+        rstRandomSelection("Route") = Route
+        rstRandomSelection("DIR") = DIR
+        rstRandomSelection("Milepost") = mp
+        rstRandomSelection("SelType") = "Main"
+        rstRandomSelection.Update
+      End If
+   Loop
+   progress.Value = progress.Value + 1
+   i = i + 1
+Loop
+i = 0
+lblProgress.Caption = "Generating ALT Random # for " & Route & ":"
+DoEvents
+Do Until i = AltPts
+loopFlag = False
+   Do Until loopFlag
+      rpt = Int((Steps * Rnd) + 1)
+      mp = rpt * Increment
+      'Checking routines follows
+      valFlag = False
+      'Check the number
+        '1.  Already Chosen  aChosen
+        '2.  Within a Bridge Area if selected onBridge
+        If Not achosen(mp) Then
+           If Bridge = True Or BridgeOn = True Then
+              If Not onBridge(mp) Then
+                 valFlag = True
+               End If
+            Else
+               valFlag = True
+            End If
+        End If
+        'Check Construction Sites and such
+        If valFlag Then
+           If Not onCMLimits(mp) Then
+              valFlag = True
+            Else
+               valFlag = False
+            End If
+        End If
+
+      If valFlag Then
+        loopFlag = True
+        rstRandomSelection.AddNew
+        rstRandomSelection("Route") = Route
+        rstRandomSelection("DIR") = DIR
+        rstRandomSelection("Milepost") = mp
+        rstRandomSelection("SelType") = "X" & AltPts - i
+        rstRandomSelection.Update
+      End If
+   Loop
+   i = i + 1
+   progress.Value = progress.Value + 1
+Loop
+
+rstLoop.MoveNext
+Loop
+
+   
+
+
+'Memory Cleanup
+rstRandomSelection.Close
+cn.Close
+Set cn = Nothing
+Set rstRandomSelection = Nothing
+lblProgress.Visible = False
+progress.Visible = False
+End Sub
+
+Private Sub Form_Load()
+
+changeSource Me.optSysType
+
+'Me.Requery
+End Sub
+
+Sub changeSource(x As Integer)
+If x = 2 Then
+   Me.subform.SourceObject = "Table.CLSamplePoints"
+   Me.lblSub.Caption = "Centerline Sample Generation Points"
+Else
+   Me.subform.SourceObject = "Table.DIRSamplePoints"
+   Me.lblSub.Caption = "Sample Generation Points by Route Direction"
+End If
+Me.Requery
+End Sub
+
+
+
+Private Sub optSysType_Click()
+changeSource Me.optSysType
+End Sub

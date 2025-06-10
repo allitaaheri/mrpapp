@@ -1,0 +1,209 @@
+Option Compare Database
+
+Public RPoints As Integer
+Public Route As Integer
+Public DIR As String
+Public Steps As Integer
+Public Increment As Single
+Public Buffer As Single
+Public SType As String
+Public AltPts As Integer
+Public Bridge As Boolean
+Public BridgeOn As Boolean
+Public cn As ADODB.Connection
+Function pMax() As Integer
+Dim rst As ADODB.Recordset
+Dim counter As Long
+
+Set rst = New ADODB.Recordset
+
+Select Case SType
+   Case "CL"
+     rst.Open "CLsamplePoints", cn, adOpenStatic
+   Case Else
+     rst.Open "DIRSamplePoints", cn, adOpenStatic
+End Select
+
+counter = 0
+Do Until rst.EOF
+   
+   counter = counter + rst("NoOfPoints") + AltPts
+   rst.MoveNext
+Loop
+pMax = counter
+
+End Function
+
+
+Function onBridge(cMP As Single) As Boolean
+Dim rst As ADODB.Recordset
+Dim s As String
+Dim i As Integer
+Dim bb As Double
+Dim be As Double
+
+
+onBridge = False
+Set rst = New ADODB.Recordset
+
+If Bridge Then
+    bb = cMP - (Buffer / 5280)
+    be = cMP + (Buffer / 5280)
+    If SType = "CL" Then
+       s = "Select * from Bridges where Route = " & Route & " and ("
+       s = s & "(BeginMP <= " & bb & " and EndMP >= " & bb & ") or "
+       s = s & "(BeginMP >= " & bb & " and EndMP <= " & be & ") or "
+       s = s & "(BeginMP <= " & be & " and EndMP >= " & be & "))"
+    Else
+       s = "Select * from Bridges where Route = " & Route & " and "
+       s = s & "DIR = '" & DIR & "' and ("
+       s = s & "(BeginMP <= " & be & " and EndMP >= " & be & ") or "
+       s = s & "(BeginMP >= " & bb & " and EndMP <= " & be & ") or "
+       s = s & "(BeginMP <= " & bb & " and EndMP >= " & bb & "))"
+    End If
+End If
+If BridgeOn Then
+    If SType = "CL" Then
+       s = "Select * from Bridges where Route =" & Route & " and  ("
+       s = s & "BeginMP <= " & cMP & " and EndMP >= " & cMP & ")"
+    Else
+       s = "Select * from Bridges where Route = " & Route & " and "
+       s = s & "DIR = '" & DIR & "' and ("
+       s = s & "BeginMP <= " & cMP & " and EndMP >= " & cMP & ")"
+    End If
+End If
+
+rst.Open s, cn, adOpenStatic
+   
+   If Not rst.EOF Then
+      rst.MoveLast
+      rst.MoveFirst
+   End If
+   i = rst.RecordCount
+   If i >= 1 Then
+      onBridge = True
+   End If
+End Function
+Function onCMLimits(cMP As Single) As Boolean
+Dim rst As ADODB.Recordset
+Dim s As String
+Dim i As Integer
+Dim bb As Double
+Dim be As Double
+
+
+onCMLimits = False
+Set rst = New ADODB.Recordset
+
+bb = cMP - (Buffer / 5280)
+be = cMP + (Buffer / 5280)
+If SType = "CL" Then
+   s = "Select * from MaintLimitConstruct where Route = " & Route & " and ("
+   s = s & "(BeginMP <= " & bb & " and EndMP >= " & bb & ") or "
+   s = s & "(BeginMP >= " & bb & " and EndMP <= " & be & ") or "
+   s = s & "(BeginMP <= " & be & " and EndMP >= " & be & "))"
+Else
+   s = "Select * from MaintLimitConstruct where Route = " & Route & " and "
+   s = s & "DIR = '" & DIR & "' and ("
+   s = s & "(BeginMP <= " & be & " and EndMP >= " & be & ") or "
+   s = s & "(BeginMP >= " & bb & " and EndMP <= " & be & ") or "
+   s = s & "(BeginMP <= " & bb & " and EndMP >= " & bb & "))"
+End If
+rst.Open s, cn, adOpenStatic
+   
+If Not rst.EOF Then
+   rst.MoveLast
+   rst.MoveFirst
+End If
+i = rst.RecordCount
+If i >= 1 Then
+   onCMLimits = True
+End If
+    
+
+End Function
+Function achosen(cMP As Single) As Boolean
+   Dim rst As ADODB.Recordset
+   Dim s As String
+   Dim i As Integer
+   
+   achosen = False
+   
+   Set rst = New ADODB.Recordset
+   s = "Select * from RandomSelections where Route = " & Route
+   s = s & " and DIR = '" & DIR & "' and Milepost = " & cMP
+   
+   rst.Open s, cn, adOpenStatic
+   
+   If Not rst.EOF Then
+      rst.MoveLast
+      rst.MoveFirst
+   End If
+   
+   i = rst.RecordCount
+   If i >= 1 Then
+      achosen = True
+   End If
+End Function
+Function getRPts() As Integer
+Dim rst As ADODB.Recordset
+Dim s As String
+
+Select Case SType
+   Case "CL"
+      s = "Select * from CLSamplePoints where Route = " & Route
+   Case Else
+      s = "Select * from DIRSamplePoints where Route = " & Route & " and "
+      s = s & "DIR = '" & DIR & "'"
+End Select
+Set rst = New ADODB.Recordset
+rst.Open s, cn, adOpenStatic
+
+rst.MoveFirst
+getRPts = rst("NoOfPoints")
+End Function
+Function FillLoop() As ADODB.Recordset
+   Dim rst As ADODB.Recordset
+   Dim s As String
+   
+   If SType = "CL" Then
+      s = "CLRoutes"
+   Else
+      s = "Routes"
+   End If
+   Set rst = New ADODB.Recordset
+   rst.Open s, cn, adOpenStatic
+   rst.MoveFirst
+
+   Set FillLoop = rst
+End Function
+
+
+Sub FillStaticVars()
+
+Increment = CSng(Forms![RMG]![txtFreq])
+Buffer = CSng(Forms![RMG]![txtBuffer])
+If Forms![RMG]![optSysType] = 1 Then
+   SType = "DIR"
+Else
+   SType = "CL"
+End If
+AltPts = Int(Forms![RMG]![txtAlt])
+
+If Forms![RMG]![chkBridges] Then
+   Bridge = True
+Else
+   Bridge = False
+End If
+If Forms![RMG]![chkOnBridge] Then
+   BridgeOn = True
+Else
+   BridgeOn = False
+End If
+
+
+End Sub
+
+
+
+
